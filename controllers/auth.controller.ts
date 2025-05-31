@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { RowDataPacket } from 'mysql2';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/database';
 
