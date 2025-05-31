@@ -167,6 +167,29 @@ class AdminController {
             }
         });
     }
+    updateUser(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { username } = req.params;
+                const { firstName, lastName, email, phoneNumber, mainBalance, bonus } = req.body;
+                // Update user in database
+                yield database_1.pool.query(`UPDATE users 
+         SET firstname = ?, 
+             surname = ?, 
+             email = ?, 
+             mobile_no = ?, 
+             main_balance = ?, 
+             bonus = ?,
+             updatedAt = CURRENT_TIMESTAMP
+         WHERE username = ?`, [firstName, lastName, email, phoneNumber, mainBalance, bonus, username]);
+                res.json({ message: 'User updated successfully' });
+            }
+            catch (error) {
+                console.error('Error updating user:', error);
+                res.status(500).json({ message: 'Error updating user' });
+            }
+        });
+    }
     getTickets(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -181,6 +204,360 @@ class AdminController {
             catch (error) {
                 console.error('Error fetching tickets:', error);
                 res.status(500).json({ message: 'Error fetching tickets' });
+            }
+        });
+    }
+    getWeeklyTickets(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Get the current date
+                const now = new Date();
+                // Get the most recent Sunday (start of week)
+                const sunday = new Date(now);
+                sunday.setDate(now.getDate() - now.getDay());
+                sunday.setHours(0, 0, 0, 0);
+                const [tickets] = yield database_1.pool.query(`
+        SELECT 
+          t.id,
+          t.ticket_id,
+          t.user_id,
+          t.game_id,
+          u.username,
+          u.mobile_no,
+          t.stake_amt,
+          t.potential_winning,
+          t.draw_time,
+          t.draw_date,
+          t.ticket_status,
+          t.created_at
+        FROM tickets t
+        JOIN users u ON t.user_id = u.id
+        WHERE t.created_at >= ?
+        AND t.ticket_status = 'pending'
+        ORDER BY t.created_at DESC
+      `, [sunday]);
+                // Randomly select winners (20% of tickets)
+                const winners = this.selectRandomWinners(tickets, 0.2);
+                res.json({ tickets, winners });
+            }
+            catch (error) {
+                console.error('Error fetching weekly tickets:', error);
+                res.status(500).json({ message: 'Error fetching weekly tickets' });
+            }
+        });
+    }
+    getMonthlyTickets(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Get the current date
+                const now = new Date();
+                // Get the first day of the current month
+                const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                firstDayOfMonth.setHours(0, 0, 0, 0);
+                const [tickets] = yield database_1.pool.query(`
+        SELECT 
+          t.id,
+          t.ticket_id,
+          t.user_id,
+          t.game_id,
+          u.username,
+          u.mobile_no,
+          t.stake_amt,
+          t.potential_winning,
+          t.draw_time,
+          t.draw_date,
+          t.ticket_status,
+          t.created_at
+        FROM tickets t
+        JOIN users u ON t.user_id = u.id
+        WHERE t.created_at >= ?
+        AND t.ticket_status = 'pending'
+        ORDER BY t.created_at DESC
+      `, [firstDayOfMonth]);
+                // Randomly select winners (20% of tickets)
+                const winners = this.selectRandomWinners(tickets, 0.2);
+                res.json({ tickets, winners });
+            }
+            catch (error) {
+                console.error('Error fetching monthly tickets:', error);
+                res.status(500).json({ message: 'Error fetching monthly tickets' });
+            }
+        });
+    }
+    // Helper method to randomly select winners
+    selectRandomWinners(tickets, percentage) {
+        if (!tickets.length)
+            return [];
+        const numWinners = Math.max(1, Math.floor(tickets.length * percentage));
+        const shuffled = [...tickets].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, numWinners);
+    }
+    getTicketsByDateRange(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { fromDate, toDate } = req.query;
+                if (!fromDate || !toDate) {
+                    return res.status(400).json({ message: 'fromDate and toDate are required' });
+                }
+                const [tickets] = yield database_1.pool.query(`
+        SELECT 
+          t.id,
+          t.ticket_id,
+          t.user_id,
+          t.game_id,
+          u.username,
+          u.mobile_no,
+          t.stake_amt,
+          t.potential_winning,
+          t.draw_time,
+          t.draw_date,
+          t.ticket_status,
+          t.created_at
+        FROM tickets t
+        JOIN users u ON t.user_id = u.id
+        WHERE t.created_at BETWEEN ? AND ?
+        AND t.ticket_status = 'pending'
+        ORDER BY t.created_at DESC
+      `, [fromDate, toDate]);
+                res.json(tickets);
+            }
+            catch (error) {
+                console.error('Error fetching tickets by date range:', error);
+                res.status(500).json({ message: 'Error fetching tickets by date range' });
+            }
+        });
+    }
+    pickWinners(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                const { ticketIds } = req.body;
+                const numberOfWinners = 1; // Set to 1 winner
+                const adminId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                if (!ticketIds || !Array.isArray(ticketIds) || ticketIds.length === 0) {
+                    return res.status(400).json({ message: 'No ticket IDs provided' });
+                }
+                if (!adminId) {
+                    return res.status(401).json({ message: 'Unauthorized' });
+                }
+                // Get all tickets
+                const [rows] = yield database_1.pool.query(`SELECT t.*, u.username 
+         FROM tickets t 
+         JOIN users u ON t.user_id = u.id 
+         WHERE t.id IN (?) AND t.ticket_status = 'pending'`, [ticketIds]);
+                const tickets = rows;
+                if (tickets.length === 0) {
+                    return res.status(404).json({ message: 'No pending tickets found' });
+                }
+                // Select random winner(s)
+                const winners = [];
+                const availableTickets = [...tickets];
+                for (let i = 0; i < numberOfWinners && availableTickets.length > 0; i++) {
+                    const randomIndex = Math.floor(Math.random() * availableTickets.length);
+                    const winner = availableTickets.splice(randomIndex, 1)[0];
+                    winners.push(winner);
+                }
+                // Update winner status in database
+                const winnerIds = winners.map(w => w.id);
+                yield database_1.pool.query(`UPDATE tickets 
+         SET ticket_status = 'won' 
+         WHERE id IN (?)`, [winnerIds]);
+                // Log the activity
+                yield database_1.pool.query(`INSERT INTO activity_logs (admin_id, action, details) 
+         VALUES (?, ?, ?)`, [adminId, 'pick_winners', JSON.stringify({ winnerIds })]);
+                return res.json({
+                    message: 'Winners picked successfully',
+                    winners: winners
+                });
+            }
+            catch (error) {
+                console.error('Error picking winners:', error);
+                return res.status(500).json({ message: 'Error picking winners' });
+            }
+        });
+    }
+    logActivity(adminId, action, details, ipAddress) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const query = `
+      INSERT INTO activity_logs (admin_id, action, details, ip_address)
+      VALUES (?, ?, ?, ?)
+    `;
+            yield database_1.pool.query(query, [adminId, action, details, ipAddress]);
+        });
+    }
+    getActivityLogs() {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const [rows] = yield database_1.pool.query(`SELECT al.*, a.username as admin_name
+        FROM activity_logs al
+        LEFT JOIN admins a ON al.admin_id = a.id
+        ORDER BY al.created_at DESC
+        LIMIT ? OFFSET ?`, [limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM activity_logs');
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error fetching activity logs:', error);
+                throw error;
+            }
+        });
+    }
+    getActivityLogsByDateRange(startDate_1, endDate_1) {
+        return __awaiter(this, arguments, void 0, function* (startDate, endDate, page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const [rows] = yield database_1.pool.query(`SELECT al.*, a.username as admin_name
+        FROM activity_logs al
+        LEFT JOIN admins a ON al.admin_id = a.id
+        WHERE al.created_at BETWEEN ? AND ?
+        ORDER BY al.created_at DESC
+        LIMIT ? OFFSET ?`, [startDate, endDate, limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM activity_logs WHERE created_at BETWEEN ? AND ?', [startDate, endDate]);
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error fetching activity logs by date range:', error);
+                throw error;
+            }
+        });
+    }
+    getActivityLogsByAdmin(adminId_1) {
+        return __awaiter(this, arguments, void 0, function* (adminId, page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const [rows] = yield database_1.pool.query(`SELECT al.*, a.username as admin_name
+        FROM activity_logs al
+        LEFT JOIN admins a ON al.admin_id = a.id
+        WHERE al.admin_id = ?
+        ORDER BY al.created_at DESC
+        LIMIT ? OFFSET ?`, [adminId, limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM activity_logs WHERE admin_id = ?', [adminId]);
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error fetching activity logs by admin:', error);
+                throw error;
+            }
+        });
+    }
+    searchActivityLogs(query_1) {
+        return __awaiter(this, arguments, void 0, function* (query, page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const searchPattern = `%${query}%`;
+                const [rows] = yield database_1.pool.query(`SELECT al.*, a.username as admin_name
+        FROM activity_logs al
+        LEFT JOIN admins a ON al.admin_id = a.id
+        WHERE al.action LIKE ? OR al.details LIKE ?
+        ORDER BY al.created_at DESC
+        LIMIT ? OFFSET ?`, [searchPattern, searchPattern, limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM activity_logs WHERE action LIKE ? OR details LIKE ?', [searchPattern, searchPattern]);
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error searching activity logs:', error);
+                throw error;
+            }
+        });
+    }
+    getTransferRecipients() {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const [rows] = yield database_1.pool.query(`SELECT tr.*, u.username
+        FROM transfer_recipients tr
+        LEFT JOIN users u ON tr.user_id = u.id
+        ORDER BY tr.created_at DESC
+        LIMIT ? OFFSET ?`, [limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM transfer_recipients');
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error fetching transfer recipients:', error);
+                throw error;
+            }
+        });
+    }
+    getTransferRecipientsByDateRange(startDate_1, endDate_1) {
+        return __awaiter(this, arguments, void 0, function* (startDate, endDate, page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const [rows] = yield database_1.pool.query(`SELECT tr.*, u.username
+        FROM transfer_recipients tr
+        LEFT JOIN users u ON tr.user_id = u.id
+        WHERE tr.created_at BETWEEN ? AND ?
+        ORDER BY tr.created_at DESC
+        LIMIT ? OFFSET ?`, [startDate, endDate, limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM transfer_recipients WHERE created_at BETWEEN ? AND ?', [startDate, endDate]);
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error fetching transfer recipients by date range:', error);
+                throw error;
+            }
+        });
+    }
+    getTransferRecipientsByUser(userId_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const [rows] = yield database_1.pool.query(`SELECT tr.*, u.username
+        FROM transfer_recipients tr
+        LEFT JOIN users u ON tr.user_id = u.id
+        WHERE tr.user_id = ?
+        ORDER BY tr.created_at DESC
+        LIMIT ? OFFSET ?`, [userId, limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM transfer_recipients WHERE user_id = ?', [userId]);
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error fetching transfer recipients by user:', error);
+                throw error;
+            }
+        });
+    }
+    searchTransferRecipients(query_1) {
+        return __awaiter(this, arguments, void 0, function* (query, page = 1, limit = 10) {
+            try {
+                const offset = (page - 1) * limit;
+                const searchPattern = `%${query}%`;
+                const [rows] = yield database_1.pool.query(`SELECT tr.*, u.username
+        FROM transfer_recipients tr
+        LEFT JOIN users u ON tr.user_id = u.id
+        WHERE tr.account_name LIKE ? OR tr.account_number LIKE ?
+        ORDER BY tr.created_at DESC
+        LIMIT ? OFFSET ?`, [searchPattern, searchPattern, limit, offset]);
+                const [totalRows] = yield database_1.pool.query('SELECT COUNT(*) as total FROM transfer_recipients WHERE account_name LIKE ? OR account_number LIKE ?', [searchPattern, searchPattern]);
+                return {
+                    data: rows,
+                    total: totalRows[0].total
+                };
+            }
+            catch (error) {
+                console.error('Error searching transfer recipients:', error);
+                throw error;
             }
         });
     }

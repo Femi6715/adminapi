@@ -21,8 +21,10 @@ class TicketsController {
             console.log('Request params:', req.params);
             console.log('Request query:', req.query);
             try {
-                console.log('Calling ticketsModel.getAllTickets()');
-                const tickets = yield this.ticketsModel.getAllTickets();
+                const { startDate, endDate } = req.query;
+                console.log('Date filters:', { startDate, endDate });
+                console.log('Calling ticketsModel.getAllTickets() with date filters');
+                const tickets = yield this.ticketsModel.getAllTickets(startDate, endDate);
                 const ticketsArray = tickets;
                 console.log('Tickets retrieved successfully, count:', ticketsArray ? ticketsArray.length : 0);
                 console.log('First ticket (if any):', ticketsArray && ticketsArray.length > 0 ? ticketsArray[0] : 'No tickets found');

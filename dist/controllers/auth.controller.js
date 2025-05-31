@@ -12,41 +12,57 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.AuthController = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../config/database");
 class AuthController {
+    register(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { username, password, email, first_name, last_name, phone_number } = req.body;
+                // Check if user already exists
+                const [existingUsers] = yield database_1.pool.query('SELECT * FROM users WHERE username = ? OR email = ?', [username, email]);
+                if (existingUsers.length > 0) {
+                    return res.status(400).json({ message: 'Username or email already exists' });
+                }
+                // Hash password
+                const hashedPassword = yield bcrypt_1.default.hash(password, 10);
+                // Insert new user
+                yield database_1.pool.query('INSERT INTO users (username, password, email, first_name, last_name, phone_number) VALUES (?, ?, ?, ?, ?, ?)', [username, hashedPassword, email, first_name, last_name, phone_number]);
+                res.status(201).json({ message: 'User registered successfully' });
+            }
+            catch (error) {
+                console.error('Registration error:', error);
+                res.status(500).json({ message: 'Error during registration' });
+            }
+        });
+    }
     login(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { username, password } = req.body;
-                // Get user from database
-                const [users] = yield database_1.pool.query('SELECT * FROM users WHERE username = ?', [username]);
-                if (users.length === 0) {
+                const [rows] = yield database_1.pool.query('SELECT * FROM users WHERE username = ?', [username]);
+                const user = rows[0];
+                if (!user) {
                     return res.status(401).json({ message: 'Invalid credentials' });
                 }
-                const user = users[0];
-                // Check if user is banned (MySQL returns 1 for true, 0 for false)
-                if (user.is_banned === 1) {
-                    return res.status(403).json({ message: 'Your account has been banned. Please contact support.' });
-                }
-                // Verify password
-                const isValidPassword = yield bcrypt_1.default.compare(password, user.password);
-                if (!isValidPassword) {
+                const validPassword = yield bcrypt_1.default.compare(password, user.password);
+                if (!validPassword) {
                     return res.status(401).json({ message: 'Invalid credentials' });
                 }
-                // Generate JWT token
-                const token = jsonwebtoken_1.default.sign({
-                    id: user.id,
-                    username: user.username,
-                    role: user.role
-                }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '24h' });
+                if (user.is_banned) {
+                    return res.status(403).json({ message: 'Account is banned' });
+                }
                 res.json({
-                    token,
                     user: {
                         id: user.id,
                         username: user.username,
-                        role: user.role
+                        email: user.email,
+                        first_name: user.first_name,
+                        last_name: user.last_name,
+                        phone_number: user.phone_number,
+                        main_balance: user.main_balance,
+                        bonus: user.bonus
                     }
                 });
             }
@@ -57,4 +73,4 @@ class AuthController {
         });
     }
 }
-exports.default = new AuthController();
+exports.AuthController = AuthController;

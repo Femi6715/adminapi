@@ -2,9 +2,28 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const tickets_controller_1 = require("../controllers/tickets.controller");
+const admin_controller_1 = require("../controllers/admin.controller");
 const router = (0, express_1.Router)();
 const ticketsController = new tickets_controller_1.TicketsController();
+const adminController = new admin_controller_1.AdminController();
 console.log('=== Setting up Tickets Routes ===');
+// Weekly, Monthly, and Range routes (must come before parameterized routes)
+router.get('/weekly', (req, res) => {
+    console.log('GET /api/admin/tickets/weekly route hit');
+    adminController.getWeeklyTickets(req, res);
+});
+router.get('/monthly', (req, res) => {
+    console.log('GET /api/admin/tickets/monthly route hit');
+    adminController.getMonthlyTickets(req, res);
+});
+router.get('/range', (req, res) => {
+    console.log('GET /api/admin/tickets/range route hit');
+    adminController.getTicketsByDateRange(req, res);
+});
+router.post('/pick-winners', (req, res) => {
+    console.log('POST /api/admin/tickets/pick-winners route hit');
+    adminController.pickWinners(req, res);
+});
 // Public routes
 router.get('/', (req, res) => {
     console.log('GET /api/admin/tickets route hit');

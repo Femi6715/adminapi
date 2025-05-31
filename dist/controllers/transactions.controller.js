@@ -10,62 +10,67 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TransactionsController = void 0;
-const database_1 = require("../config/database");
+const transactions_model_1 = require("../models/transactions.model");
 class TransactionsController {
-    getTransactions(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
+    constructor() {
+        this.getTransactions = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            console.log('\n=== getTransactions called ===');
+            console.log('Request URL:', req.url);
+            console.log('Request method:', req.method);
+            console.log('Request headers:', req.headers);
+            console.log('Request params:', req.params);
+            console.log('Request query:', req.query);
             try {
-                console.log('Attempting to fetch transactions...');
-                const [rows] = yield database_1.pool.query('SELECT * FROM transactions ORDER BY updatedAt DESC');
-                console.log('Successfully fetched transactions:', rows.length);
-                res.json({ transactions: rows });
+                console.log('Calling transactionsModel.getAllTransactions()');
+                const transactions = yield this.transactionsModel.getAllTransactions();
+                const transactionsArray = transactions;
+                console.log('Transactions retrieved successfully, count:', transactionsArray ? transactionsArray.length : 0);
+                console.log('First transaction (if any):', transactionsArray && transactionsArray.length > 0 ? transactionsArray[0] : 'No transactions found');
+                if (!transactionsArray || transactionsArray.length === 0) {
+                    console.log('No transactions found in database');
+                    return res.status(404).json({ error: 'No transactions found' });
+                }
+                res.json({ transactions: transactions });
             }
             catch (error) {
                 console.error('Error fetching transactions:', error);
-                if (error instanceof Error) {
-                    console.error('Error details:', error.message);
-                    if (error.message.includes('Table')) {
-                        res.status(404).json({ message: 'Transactions table not found in database' });
-                    }
-                    else {
-                        res.status(500).json({ message: 'Error fetching transactions', details: error.message });
-                    }
-                }
-                else {
-                    res.status(500).json({ message: 'Unknown error fetching transactions' });
-                }
+                res.status(500).json({ error: 'Internal server error', details: error.message });
             }
         });
-    }
-    getTransaction(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
+        this.getTransactionById = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const { id } = req.params;
-                console.log('Attempting to fetch transaction with ID:', id);
-                const [rows] = yield database_1.pool.query('SELECT * FROM transactions WHERE id = ?', [id]);
-                if (rows.length === 0) {
-                    res.status(404).json({ message: 'Transaction not found' });
-                    return;
+                const id = parseInt(req.params.id, 10);
+                const transaction = yield this.transactionsModel.getTransactionById(id);
+                if (!transaction) {
+                    return res.status(404).json({ error: 'Transaction not found' });
                 }
-                console.log('Successfully fetched transaction');
-                res.json(rows[0]);
+                res.json({ transaction });
             }
             catch (error) {
                 console.error('Error fetching transaction:', error);
-                if (error instanceof Error) {
-                    console.error('Error details:', error.message);
-                    if (error.message.includes('Table')) {
-                        res.status(404).json({ message: 'Transactions table not found in database' });
-                    }
-                    else {
-                        res.status(500).json({ message: 'Error fetching transaction', details: error.message });
-                    }
-                }
-                else {
-                    res.status(500).json({ message: 'Unknown error fetching transaction' });
-                }
+                res.status(500).json({ error: 'Internal server error', details: error.message });
             }
         });
+        this.updateTransactionStatus = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const id = parseInt(req.params.id, 10);
+                const { status } = req.body;
+                if (!status || !['pending', 'completed', 'failed'].includes(status)) {
+                    return res.status(400).json({ error: 'Invalid status' });
+                }
+                const success = yield this.transactionsModel.updateTransactionStatus(id, status);
+                if (!success) {
+                    return res.status(404).json({ error: 'Transaction not found' });
+                }
+                res.json({ message: 'Transaction status updated successfully' });
+            }
+            catch (error) {
+                console.error('Error updating transaction status:', error);
+                res.status(500).json({ error: 'Internal server error', details: error.message });
+            }
+        });
+        this.transactionsModel = new transactions_model_1.TransactionsModel();
+        console.log('TransactionsController initialized');
     }
 }
 exports.TransactionsController = TransactionsController;

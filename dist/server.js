@@ -5,54 +5,41 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const morgan_1 = __importDefault(require("morgan"));
+const environment_1 = require("../config/environment");
 const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
-require("./config/database"); // Import database connection
+const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
+const users_routes_1 = __importDefault(require("./routes/users.routes"));
+const tickets_routes_1 = __importDefault(require("./routes/tickets.routes"));
+const transactions_routes_1 = __importDefault(require("./routes/transactions.routes"));
+const activity_logs_routes_1 = __importDefault(require("./routes/activity-logs.routes"));
+const withdraws_routes_1 = __importDefault(require("./routes/withdraws.routes"));
+const error_middleware_1 = require("./middleware/error.middleware");
+const database_1 = require("../src/config/database");
 const app = (0, express_1.default)();
-const port = process.env.PORT || 3000;
 // Middleware
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
-app.use(express_1.default.urlencoded({ extended: true }));
-// Log all requests
-app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    next();
-});
-// Routes
+app.use((0, morgan_1.default)('dev'));
+// Mount routes
+app.use('/api/auth', auth_routes_1.default);
 app.use('/api/admin', admin_routes_1.default);
-// Debug route to check all registered routes
-app.get('/debug/routes', (req, res) => {
-    const routes = [];
-    app._router.stack.forEach((middleware) => {
-        if (middleware.route) {
-            routes.push({
-                path: middleware.route.path,
-                methods: Object.keys(middleware.route.methods)
-            });
-        }
-        else if (middleware.name === 'router') {
-            middleware.handle.stack.forEach((handler) => {
-                if (handler.route) {
-                    routes.push({
-                        path: handler.route.path,
-                        methods: Object.keys(handler.route.methods)
-                    });
-                }
-            });
-        }
-    });
-    res.json(routes);
+app.use('/api/users', users_routes_1.default);
+app.use('/api/tickets', tickets_routes_1.default);
+app.use('/api/transactions', transactions_routes_1.default);
+app.use('/api/activity-logs', activity_logs_routes_1.default);
+app.use('/api/withdraws', withdraws_routes_1.default);
+// Test database connection
+database_1.pool.query('SELECT NOW()')
+    .then(() => {
+    console.log('Database connected successfully');
+})
+    .catch((err) => {
+    console.error('Error connecting to the database:', err);
 });
 // Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ message: 'Something broke!' });
-});
-// Basic route for testing
-app.get('/', (req, res) => {
-    res.json({ message: 'Server is running' });
-});
-// Start server
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+app.use(error_middleware_1.errorHandler);
+const PORT = environment_1.environment.port || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });

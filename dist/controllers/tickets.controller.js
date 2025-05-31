@@ -10,107 +10,171 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TicketsController = void 0;
-const database_1 = require("../config/database");
+const tickets_model_1 = require("../models/tickets.model");
 class TicketsController {
-    getTickets(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
+    constructor() {
+        this.getTickets = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            console.log('\n=== getTickets called ===');
+            console.log('Request URL:', req.url);
+            console.log('Request method:', req.method);
+            console.log('Request headers:', req.headers);
+            console.log('Request params:', req.params);
+            console.log('Request query:', req.query);
             try {
-                console.log('Attempting to fetch tickets...');
-                const [rows] = yield database_1.pool.query('SELECT * FROM tickets ORDER BY created_at DESC');
-                console.log('Successfully fetched tickets:', rows.length);
-                res.json({ tickets: rows });
+                const { startDate, endDate } = req.query;
+                console.log('Date filters:', { startDate, endDate });
+                console.log('Calling ticketsModel.getAllTickets() with date filters');
+                const tickets = yield this.ticketsModel.getAllTickets(startDate, endDate);
+                const ticketsArray = tickets;
+                console.log('Tickets retrieved successfully, count:', ticketsArray ? ticketsArray.length : 0);
+                console.log('First ticket (if any):', ticketsArray && ticketsArray.length > 0 ? ticketsArray[0] : 'No tickets found');
+                if (!ticketsArray || ticketsArray.length === 0) {
+                    console.log('No tickets found in database');
+                    return res.status(404).json({ error: 'No tickets found' });
+                }
+                res.json({ tickets: tickets });
             }
             catch (error) {
                 console.error('Error fetching tickets:', error);
-                if (error instanceof Error) {
-                    console.error('Error details:', error.message);
-                    if (error.message.includes('Table')) {
-                        res.status(404).json({ message: 'Tickets table not found in database' });
-                    }
-                    else {
-                        res.status(500).json({ message: 'Error fetching tickets', details: error.message });
-                    }
-                }
-                else {
-                    res.status(500).json({ message: 'Unknown error fetching tickets' });
-                }
+                res.status(500).json({ error: 'Internal server error', details: error.message });
             }
         });
-    }
-    getTicket(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
+        this.getTicketStats = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const { id } = req.params;
-                console.log('Attempting to fetch ticket with ID:', id);
-                const [rows] = yield database_1.pool.query('SELECT * FROM tickets WHERE id = ?', [id]);
-                if (rows.length === 0) {
-                    res.status(404).json({ message: 'Ticket not found' });
-                    return;
+                const stats = yield this.ticketsModel.getTicketStats();
+                res.json(stats);
+            }
+            catch (error) {
+                console.error('Error fetching ticket stats:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+        this.getTicketById = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { ticketId } = req.params;
+                const ticket = yield this.ticketsModel.getTicketById(ticketId);
+                if (!ticket) {
+                    return res.status(404).json({ error: 'Ticket not found' });
                 }
-                console.log('Successfully fetched ticket');
-                res.json(rows[0]);
+                res.json({ ticket });
             }
             catch (error) {
                 console.error('Error fetching ticket:', error);
-                if (error instanceof Error) {
-                    console.error('Error details:', error.message);
-                    if (error.message.includes('Table')) {
-                        res.status(404).json({ message: 'Tickets table not found in database' });
-                    }
-                    else {
-                        res.status(500).json({ message: 'Error fetching ticket', details: error.message });
-                    }
-                }
-                else {
-                    res.status(500).json({ message: 'Unknown error fetching ticket' });
-                }
+                res.status(500).json({ error: 'Internal server error' });
             }
         });
-    }
-    updateTicketStatus(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
+        this.updateTicketStatus = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const { id } = req.params;
+                const { ticketId } = req.params;
                 const { status } = req.body;
-                console.log('Request params:', req.params);
-                console.log('Request body:', req.body);
-                console.log('Attempting to update ticket status:', { id, status });
-                // First check if ticket exists
-                const [tickets] = yield database_1.pool.query('SELECT * FROM tickets WHERE ticket_id = ?', [id]);
-                console.log('Found tickets:', tickets);
-                if (tickets.length === 0) {
-                    console.log('No ticket found with ticket_id:', id);
-                    res.status(404).json({ message: 'Ticket not found' });
-                    return;
+                console.log('\n=== Starting Ticket Status Update ===');
+                console.log('Request details:', {
+                    ticketId,
+                    status,
+                    body: req.body,
+                    headers: req.headers,
+                    url: req.url,
+                    method: req.method
+                });
+                if (!status) {
+                    console.log('Error: Status is required');
+                    return res.status(400).json({ error: 'Status is required' });
                 }
+                // Validate the status value
+                const validStatuses = ['pending', 'won', 'lose'];
+                if (!validStatuses.includes(status.toLowerCase())) {
+                    console.log('Error: Invalid status value:', status);
+                    return res.status(400).json({
+                        error: 'Invalid status',
+                        message: `Status must be one of: ${validStatuses.join(', ')}`
+                    });
+                }
+                // First get the ticket to check if it exists
+                console.log('Fetching ticket details for:', ticketId);
+                const ticket = yield this.ticketsModel.getTicketById(ticketId);
+                if (!ticket) {
+                    console.log('Error: Ticket not found:', ticketId);
+                    return res.status(404).json({
+                        error: 'Ticket not found',
+                        message: `No ticket found with ID: ${ticketId}`
+                    });
+                }
+                console.log('Found ticket:', {
+                    ticketId: ticket.ticket_id,
+                    userId: ticket.user_id,
+                    currentStatus: ticket.ticket_status,
+                    potentialWinning: ticket.potential_winning,
+                    stakeAmount: ticket.stake_amt
+                });
                 // Update the ticket status
-                const [result] = yield database_1.pool.query('UPDATE tickets SET ticket_status = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?', [status, id]);
-                console.log('Update result:', result);
-                if (result.affectedRows === 0) {
-                    console.log('No rows affected by update');
-                    res.status(404).json({ message: 'Failed to update ticket status' });
-                    return;
+                console.log('Attempting to update ticket status to:', status);
+                const success = yield this.ticketsModel.updateTicketStatus(ticketId, status);
+                if (!success) {
+                    console.log('Error: Failed to update ticket status');
+                    return res.status(400).json({
+                        error: 'Update failed',
+                        message: 'Failed to update ticket status. Please try again.'
+                    });
                 }
                 // Get the updated ticket
-                const [updatedTickets] = yield database_1.pool.query('SELECT * FROM tickets WHERE ticket_id = ?', [id]);
-                console.log('Updated ticket:', updatedTickets[0]);
-                console.log('Successfully updated ticket status');
+                console.log('Fetching updated ticket details...');
+                const updatedTicket = yield this.ticketsModel.getTicketById(ticketId);
+                if (!updatedTicket) {
+                    console.log('Error: Updated ticket not found');
+                    return res.status(404).json({
+                        error: 'Updated ticket not found',
+                        message: 'The ticket was updated but could not be retrieved'
+                    });
+                }
+                console.log('Successfully updated ticket:', {
+                    ticketId: updatedTicket.ticket_id,
+                    newStatus: updatedTicket.ticket_status,
+                    userId: updatedTicket.user_id,
+                    potentialWinning: updatedTicket.potential_winning
+                });
+                console.log('=== Ticket Status Update Complete ===\n');
+                // Send detailed response
                 res.json({
                     message: 'Ticket status updated successfully',
-                    ticket: updatedTickets[0]
+                    ticket: updatedTicket,
+                    details: {
+                        ticketId: updatedTicket.ticket_id,
+                        status: updatedTicket.ticket_status,
+                        userId: updatedTicket.user_id,
+                        potentialWinning: updatedTicket.potential_winning
+                    }
                 });
             }
             catch (error) {
-                console.error('Error updating ticket status:', error);
+                console.error('\n=== Error in updateTicketStatus ===');
+                console.error('Error details:', error);
                 if (error instanceof Error) {
-                    console.error('Error details:', error.message);
-                    res.status(500).json({ message: 'Error updating ticket status', details: error.message });
+                    console.error('Error message:', error.message);
+                    console.error('Error stack:', error.stack);
                 }
-                else {
-                    res.status(500).json({ message: 'Unknown error updating ticket status' });
-                }
+                console.error('=== Error Log End ===\n');
+                res.status(500).json({
+                    error: 'Internal server error',
+                    message: error instanceof Error ? error.message : 'Unknown error occurred'
+                });
             }
         });
+        this.deleteTicket = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const ticketId = parseInt(req.params.ticket_id, 10);
+                const deletedTicket = yield this.ticketsModel.deleteTicket(ticketId);
+                if (!deletedTicket) {
+                    return res.status(404).json({ error: 'Ticket not found' });
+                }
+                res.json({ message: 'Ticket deleted successfully' });
+            }
+            catch (error) {
+                console.error('Error deleting ticket:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+        this.ticketsModel = new tickets_model_1.TicketsModel();
+        console.log('TicketsController initialized');
     }
 }
 exports.TicketsController = TicketsController;

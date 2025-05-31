@@ -12,11 +12,28 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TicketsModel = void 0;
 const database_1 = require("../config/database");
 class TicketsModel {
-    getAllTickets() {
+    getAllTickets(startDate, endDate) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                console.log('Executing getAllTickets query');
-                const [rows] = yield database_1.pool.query('SELECT * FROM tickets ORDER BY created_at DESC');
+                console.log('Executing getAllTickets query with date filters:', { startDate, endDate });
+                let query = 'SELECT * FROM tickets';
+                const params = [];
+                if (startDate && endDate) {
+                    query += ' WHERE created_at BETWEEN ? AND ?';
+                    params.push(startDate, endDate);
+                }
+                else if (startDate) {
+                    query += ' WHERE created_at >= ?';
+                    params.push(startDate);
+                }
+                else if (endDate) {
+                    query += ' WHERE created_at <= ?';
+                    params.push(endDate);
+                }
+                query += ' ORDER BY created_at DESC';
+                console.log('Query:', query);
+                console.log('Params:', params);
+                const [rows] = yield database_1.pool.query(query, params);
                 console.log('Query result:', rows);
                 return rows;
             }
@@ -247,6 +264,61 @@ class TicketsModel {
             catch (error) {
                 console.error('Error in deleteTicket:', error);
                 throw error;
+            }
+        });
+    }
+    pickWinnerForDraw(drawDate) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const connection = yield database_1.pool.getConnection();
+            try {
+                yield connection.beginTransaction();
+                // Check if a winner already exists for this draw
+                const [existingWinners] = yield connection.query('SELECT * FROM tickets WHERE draw_date = ? AND ticket_status = "won"', [drawDate]);
+                if (existingWinners.length > 0) {
+                    yield connection.rollback();
+                    return false; // Winner already picked
+                }
+                // Get all pending tickets for this draw
+                const [pendingTickets] = yield connection.query('SELECT * FROM tickets WHERE draw_date = ? AND ticket_status = "pending"', [drawDate]);
+                if (pendingTickets.length === 0) {
+                    yield connection.rollback();
+                    return false; // No tickets to pick from
+                }
+                // Pick a random winner
+                const randomIndex = Math.floor(Math.random() * pendingTickets.length);
+                const winner = pendingTickets[randomIndex];
+                // Update the winner's status to 'won'
+                const [updateResult] = yield connection.query('UPDATE tickets SET ticket_status = "won", updated_at = NOW() WHERE id = ?', [winner.id]);
+                if (updateResult.affectedRows === 0) {
+                    yield connection.rollback();
+                    return false;
+                }
+                // Log picking the winner
+                yield connection.query(`INSERT INTO activity_logs (admin_id, action, details, created_at) VALUES (?, ?, ?, NOW())`, [null, 'AUTO_WINNER_PICKED', `Ticket ${winner.ticket_id} for user ${winner.user_id} automatically picked as winner for draw ${drawDate}.`]);
+                // Update the user's balance
+                const [balanceResult] = yield connection.query('UPDATE users SET main_balance = main_balance + ? WHERE id = ?', [winner.potential_winning, winner.user_id]);
+                if (balanceResult.affectedRows === 0) {
+                    yield connection.rollback();
+                    return false;
+                }
+                // Log balance update
+                yield connection.query(`INSERT INTO activity_logs (admin_id, action, details, created_at) VALUES (?, ?, ?, NOW())`, [null, 'USER_BALANCE_UPDATED', `User ${winner.user_id} balance increased by ${winner.potential_winning} for winning ticket ${winner.ticket_id}.`]);
+                // Insert a transaction record
+                yield connection.query(`INSERT INTO transactions (
+           user_id, amount, amount_involved, acct_balance, time_stamp, trans_date, transaction_type, status, reference, createdAt, updatedAt
+         ) VALUES (?, ?, ?, (SELECT main_balance FROM users WHERE id = ?), ?, ?, 'winning', 'completed', ?, NOW(), NOW())`, [winner.user_id, winner.potential_winning, winner.potential_winning, winner.user_id, winner.time_stamp, winner.draw_date, `WIN-${winner.ticket_id}`]);
+                // Log transaction creation
+                yield connection.query(`INSERT INTO activity_logs (admin_id, action, details, created_at) VALUES (?, ?, ?, NOW())`, [null, 'WINNING_TRANSACTION_CREATED', `Transaction record created for user ${winner.user_id}, ticket ${winner.ticket_id}, amount ${winner.potential_winning}.`]);
+                yield connection.commit();
+                return true;
+            }
+            catch (error) {
+                yield connection.rollback();
+                console.error('Error in pickWinnerForDraw:', error);
+                return false;
+            }
+            finally {
+                connection.release();
             }
         });
     }

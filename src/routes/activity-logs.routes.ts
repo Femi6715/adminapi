@@ -88,8 +88,11 @@ router.get('/search', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const { action, details } = req.body;
-    const adminId = req.user.id;
-    const ipAddress = req.ip;
+    const adminId = req.user?.id;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const ipAddress = req.ip || 'unknown';
 
     if (!action || !details) {
       return res.status(400).json({ error: 'Action and details are required' });
