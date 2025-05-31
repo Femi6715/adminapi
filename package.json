@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
+    "morgan": "^1.10.0",
     "mysql2": "^3.9.2",
     "ngx-toastr": "^19.0.0",
     "xlsx": "^0.18.5"
