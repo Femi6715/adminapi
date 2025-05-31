@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import { environment } from '../config/environment';
+import { environment } from './config/environment';
 import adminRoutes from './routes/admin.routes';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/users.routes';
@@ -10,7 +10,7 @@ import transactionRoutes from './routes/transactions.routes';
 import activityLogsRoutes from './routes/activity-logs.routes';
 import withdrawsRoutes from './routes/withdraws.routes';
 import { errorHandler } from './middleware/error.middleware';
-import { pool } from '../src/config/database';
+import { pool } from './config/database';
 
 const app = express();
 

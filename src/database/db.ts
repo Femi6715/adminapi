@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { environment } from '../../config/environment';
+import { environment } from '../config/environment';
 
 // Create the connection pool
 export const db = mysql.createPool({
@@ -7,7 +7,7 @@ export const db = mysql.createPool({
   port: environment.database.port,
   user: environment.database.user,
   password: environment.database.password,
-  database: environment.database.name,
+  database: environment.database.database,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0

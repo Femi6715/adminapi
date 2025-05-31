@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt, { SignOptions } from 'jsonwebtoken';
-import { environment } from '../../config/environment';
+import { environment } from '../config/environment';
 import { pool } from '../config/database';
 import { RowDataPacket, ResultSetHeader, OkPacket } from 'mysql2';
 

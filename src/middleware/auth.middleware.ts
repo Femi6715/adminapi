@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
-import { environment } from '../../config/environment';
+import { environment } from '../config/environment';
 
 interface UserPayload extends JwtPayload {
   id: number;
